@@ -122,12 +122,14 @@ public:
     const std::vector<MultipleCellsOccupiedByPatch>& distillation_regions() const override {return cached_distillation_regions_;};
     const std::vector<SurfaceCodeTimestep>& distillation_times() const override {return cached_distillation_times_;};
     const std::vector<Cell>& ancilla_location() const override {return cached_ancilla_locations_;}
-
+    // TRL 01/24/23: Function to return dead cells
     const std::vector<Cell>& dead_location() const override {return cached_dead_cells_;}
     const std::vector<Cell>& distilled_state_locations(size_t distillation_region_idx) const override
     {
         return cached_distilled_state_locations_[distillation_region_idx];
     }
+    // TRL 01/25/23: Creating a boolean to designate whether or not magic states are reserved
+    const bool magic_states_reserved() const override {return magic_states_reserved_;}
 
 private:
     std::vector<SparsePatch> cached_core_patches_;
@@ -138,6 +140,8 @@ private:
     std::vector<std::vector<Cell>> cached_distilled_state_locations_;
     // TRL 01/24/23: Caching dead cells here so that they can be used later
     std::vector<Cell> cached_dead_cells_;
+    // TRL 01/25/23: Creating a boolean to designate whether or not magic states are reserved
+    bool magic_states_reserved_; 
     void init_cache(const AsciiLayoutSpec& spec);
 
 };

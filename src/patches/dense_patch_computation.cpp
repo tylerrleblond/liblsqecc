@@ -6,9 +6,16 @@ namespace lsqecc
 
 std::optional<Cell> find_place_for_magic_state(const DenseSlice& slice, const Layout& layout, size_t distillation_region_idx)
 {
+    // TRL 01/25/23: Added logic for the case that cells are reserved for magic states
     for(const auto& cell: layout.distilled_state_locations(distillation_region_idx))
-        if(slice.is_cell_free(cell))
-            return cell;
+        if (layout.magic_states_reserved()) {
+            if (slice.patch_at(cell)->type == PatchType::Distillation)
+                return cell;
+        }
+        else {
+            if(slice.is_cell_free(cell))
+                return cell;
+        }
 
     return std::nullopt;
 }
@@ -55,6 +62,18 @@ void advance_slice(DenseSlice& slice, const Layout& layout)
     size_t distillation_region_index = 0;
     for (auto& time_to_magic_state_here: slice.time_to_next_magic_state_by_distillation_region)
     {
+        // TRL 01/25/23: If a cell that should be reserved for a magic state is free, we re-set it 
+        if (layout.magic_states_reserved()) {
+            for (const Cell& cell: layout.distilled_state_locations(distillation_region_index)) {
+                if (slice.is_cell_free(cell)) {
+                    slice.patch_at(cell) = DensePatch{
+                        Patch{PatchType::Distillation,PatchActivity::Distillation,std::nullopt},
+                        CellBoundaries{Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false},
+                            Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false}}};
+                }
+            }            
+        }
+        
         time_to_magic_state_here--;
 
         if(time_to_magic_state_here == 0){
@@ -64,7 +83,8 @@ void advance_slice(DenseSlice& slice, const Layout& layout)
             {
                 SparsePatch magic_state_patch = LayoutHelpers::basic_square_patch(*magic_state_cell);
                 magic_state_patch.type = PatchType::PreparedState;
-                slice.place_sparse_patch(magic_state_patch);
+                // TRL 01/25/23: Added second argument to be consistent with 'bool distillation'
+                slice.place_sparse_patch(magic_state_patch, true);
                 slice.magic_state_queue.push(*magic_state_cell);
             }
             time_to_magic_state_here = layout.distillation_times()[distillation_region_index];
@@ -97,7 +117,8 @@ void stitch_boundaries(
 void apply_routing_region(DenseSlice& slice, const RoutingRegion& routing_region)
 {
     for(const auto& occupied_cell : routing_region.cells)
-        slice.place_sparse_patch(SparsePatch{{PatchType::Routing,PatchActivity::None},occupied_cell});
+        // TRL 01/25/23: Added second argument to be consistent with 'bool distillation'
+        slice.place_sparse_patch(SparsePatch{{PatchType::Routing,PatchActivity::None},occupied_cell}, false);
 }
 
 /*
@@ -222,7 +243,8 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
         if (!location) return {std::make_unique<std::runtime_error>("Could not allocate ancilla"), {}};
 
         slice.patch_at(*location);
-        slice.place_sparse_patch(LayoutHelpers::basic_square_patch(*location));
+        // TRL 01/25/23: Added second argument to be consistent with 'bool distillation'
+        slice.place_sparse_patch(LayoutHelpers::basic_square_patch(*location), false);
         slice.patch_at(*location)->id = init->target;
 
         return {nullptr, {}};
@@ -284,8 +306,8 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
             if(could_not_find_space_for_patch)
                 return {std::make_unique<std::runtime_error>(
                         "Could not find space to place patch after rotation"),{std::move(instruction)}};
-
-            slice.place_sparse_patch(busy_region->state_after_clearing);
+            // TRL 01/25/23: Added second argument to be consistent with 'bool distillation'
+            slice.place_sparse_patch(busy_region->state_after_clearing,false);
             return {nullptr,{}};
         }
         else

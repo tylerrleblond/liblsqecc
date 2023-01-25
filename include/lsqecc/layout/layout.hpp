@@ -22,6 +22,8 @@ struct Layout {
     virtual const std::vector<Cell>& ancilla_location() const = 0;
     // TRL 01/24/23: Function to return vector of dead cells; adding here as well as in LayoutFromSpec to make everything consistent
     virtual const std::vector<Cell>& dead_location() const = 0;
+    // TRL 01/25/23: Creating a boolean to designate whether or not magic states are reserved
+    virtual const bool magic_states_reserved() const = 0;
 
     template<class F> void for_each_cell(F f) const;
 
@@ -82,10 +84,13 @@ public:
 
         distilled_state_locations_ = {{Cell{2,0},Cell{2,1},Cell{2,2}},
                                       {Cell{2,3},Cell{2,4},Cell{2,5}},};
+        // TRL 01/25/23: Creating a boolean to designate whether or not magic states are reserved
+        magic_states_reserved_ = false;
 
         ancilla_locations_ = {Cell{1,7}};
         // TRL 01/24/23: Vector of dead cells; adding here only to make everything consistent   
         dead_cells_ = {};
+        
 
 
         for(const auto& r: distillation_regions_)
@@ -127,6 +132,10 @@ public:
     {
         return dead_cells_;
     }
+    // TRL 01/25/23: Creating a boolean to designate whether or not magic states are reserved
+    const bool magic_states_reserved() const override {
+        return magic_states_reserved_;
+    }
 
 private:
     size_t num_qubits_;
@@ -137,6 +146,8 @@ private:
     std::vector<std::vector<Cell>> distilled_state_locations_;
     // TRL 01/24/23: Vector of dead cells; adding here only to make everything consistent
     std::vector<Cell> dead_cells_;
+    // TRL 01/25/23: Creating a boolean to designate whether or not magic states are reserved
+    bool magic_states_reserved_; 
 
 };
 

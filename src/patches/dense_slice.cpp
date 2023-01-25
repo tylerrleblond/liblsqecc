@@ -116,7 +116,8 @@ DenseSlice::DenseSlice(const lsqecc::Layout &layout, const tsl::ordered_set<Patc
     auto core_qubit_ids_itr = core_qubit_ids.begin();
     for (const SparsePatch& p : layout.core_patches())
     {
-        Cell cell = place_sparse_patch(p);
+        // TRL 01/25/23: Added second argument to be consistent with 'bool distillation'
+        Cell cell = place_sparse_patch(p,false);
         patch_at(cell)->id = *core_qubit_ids_itr++;
     }
 
@@ -135,7 +136,20 @@ DenseSlice::DenseSlice(const lsqecc::Layout &layout, const tsl::ordered_set<Patc
     {
         patch_at(cell) = DensePatch{
             Patch{PatchType::Dead,PatchActivity::Dead,std::nullopt},
-            CellBoundaries{Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false}}};
+            CellBoundaries{Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false},
+                Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false}}};
+    }
+
+    // TRL 01/25/23: If the distilled_state_locations are supposed to be reserved, add each one as a DensePatch so that the router does not see them as "free"
+    if (layout.magic_states_reserved()) {
+        for (unsigned int i=0; i<layout.distillation_regions().size(); i++) {
+            for (const Cell& cell: layout.distilled_state_locations(i)) {
+                patch_at(cell) = DensePatch{
+                    Patch{PatchType::Distillation,PatchActivity::Distillation,std::nullopt},
+                    CellBoundaries{Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false},
+                        Boundary{BoundaryType::Connected, false},Boundary{BoundaryType::Connected, false}}};
+            }
+        }
     }
     
     size_t distillation_time_offset = 0;
@@ -155,15 +169,17 @@ bool DenseSlice::is_cell_free(const Cell& cell) const
     return !patch_at(cell).has_value();
 }
 
-
-Cell DenseSlice::place_sparse_patch(const SparsePatch& sparse_patch)
+// TRL 01/25/23: Added bool distillation to designate whether this was called by find_magic_state
+Cell DenseSlice::place_sparse_patch(const SparsePatch& sparse_patch, bool distillation)
 {
     auto* occupied_cell = std::get_if<SingleCellOccupiedByPatch>(&sparse_patch.cells);
     if(!occupied_cell)
         throw std::logic_error("Placing Multi Patch cell not yet supported");
-    if(!is_cell_free(occupied_cell->cell))
-        throw std::logic_error(lstk::cat("Double patch occupation at ",occupied_cell->cell, "\n",
-                "Found patch: ", patch_at(occupied_cell->cell)->id.value_or(-1)));
+    else {
+        if(!is_cell_free(occupied_cell->cell) && !distillation)
+            throw std::logic_error(lstk::cat("Double patch occupation at ",occupied_cell->cell, "\n",
+                    "Found patch: ", patch_at(occupied_cell->cell)->id.value_or(-1)));
+    }
 
     patch_at(occupied_cell->cell) = DensePatch::from_sparse_patch(sparse_patch);
     return occupied_cell->cell;

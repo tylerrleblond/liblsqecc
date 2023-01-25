@@ -51,7 +51,8 @@ struct DenseSlice : public Slice
     bool have_boundary_of_type_with(const Cell& target, const Cell& neighbour, PauliOperator op) const override;
 
     // Return a cell of the placed patch
-    Cell place_sparse_patch(const SparsePatch& sparse_patch);
+    // TRL 01/25/23: Added second argument to be consistent with 'bool distillation'
+    Cell place_sparse_patch(const SparsePatch& sparse_patch, bool distillation);
 
     void delete_patch_by_id(PatchId id);
 

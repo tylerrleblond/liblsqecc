@@ -137,6 +137,13 @@ void LayoutFromSpec::init_cache(const AsciiLayoutSpec& spec)
 
     // TRL 01/12/23: Checking if any ReservedForMagicState Cell exists
     auto reserved_for_magic_state_cells = spec.find_all_cells_of_type(AsciiLayoutSpec::CellType::ReservedForMagicState);
+    // TRL 01/25/23: If any 'M' exist, set magic_states_reserved_ to 'true'.
+    if (reserved_for_magic_state_cells.size() == 0) {
+        magic_states_reserved_ = false;
+    }
+    else {
+        magic_states_reserved_ = true;
+    }
 
     for(const AsciiLayoutSpec::CellType distillation_region_char : AsciiLayoutSpec::k_distillation_region_types)
     {
@@ -169,7 +176,8 @@ void LayoutFromSpec::init_cache(const AsciiLayoutSpec& spec)
                         .get_neigbours_within_bounding_box_inclusive({0,0},cached_furthest_cell_);
                 for(const auto& neighbour: inside_neighbours)
                     // TRL 01/12/23: Using ReservedForMagicStates instead of RoutingAncilla if the user has specified any of them at all
-                    if (reserved_for_magic_state_cells.size() == 0) {
+                    // TRL 01/25/23: Updated to use magic_states_reserved_ member variable
+                    if (!magic_states_reserved_) {
                         if( spec.get_grid_spec()[neighbour.row][neighbour.col] == AsciiLayoutSpec::CellType::RoutingAncilla) {
                             queue_for_new_region.push_back(neighbour);
                         }
@@ -187,6 +195,24 @@ void LayoutFromSpec::init_cache(const AsciiLayoutSpec& spec)
 
         }
 
+    }
+
+    // TRL 01/25/23: An 'M' is only added to a distillation region's queue if it is adjacent to that region. Here we check if there are any left as 'r' and let the user know.
+    if (magic_states_reserved_) {
+        int reserved_count = 0;
+        for (unsigned int i = 0; i < cached_distilled_state_locations_.size(); i++) {
+            for (unsigned int j = 0; j< cached_distilled_state_locations_[i].size(); j++) {
+                reserved_count++;
+            }
+        }
+        try {
+            if (reserved_count != reserved_for_magic_state_cells.size()) {
+                throw std::string("Cells reserved for magic states must be adjacent to distillation regions. Converting mis-used 'M' to 'r'.");
+            }
+        }
+        catch (std::string& error) {
+            std::cerr << error << std::endl;
+        }
     }
 
     for(const auto&[row, row_data]: iter::enumerate(spec.get_grid_spec()))
