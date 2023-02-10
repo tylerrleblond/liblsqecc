@@ -381,7 +381,7 @@ DensePatchComputationResult run_through_dense_slices(
 
             auto application_result = try_apply_instruction_with_followup_attempts(slice, instruction, layout, router);
             if (!application_result.followup_instructions.empty())
-            {
+            {               
                 slice_visitor(slice);
                 advance_slice(slice, layout);
                 res.slice_count_++;
