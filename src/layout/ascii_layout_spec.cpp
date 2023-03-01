@@ -71,11 +71,11 @@ Cell AsciiLayoutSpec::furthest_cell() const
 }
 
 
-MultipleCellsOccupiedByPatch make_distillation_region_starting_from(const Cell& cell, const AsciiLayoutSpec& spec)
+MultipleCellsOccupiedByPatch make_distillation_region_starting_from(const Cell& starting_cell, const AsciiLayoutSpec& spec)
 {
     MultipleCellsOccupiedByPatch region;
-    auto single_cells = iter::imap(LayoutHelpers::make_distillation_region_cell, spec.connected_component(cell));
-    std::move(single_cells.begin(), single_cells.end(), std::back_inserter(region.sub_cells));
+    for (const auto &distillation_cell : spec.connected_component(starting_cell))
+        region.sub_cells.push_back(LayoutHelpers::make_distillation_region_cell(distillation_cell));
     return region;
 }
 
@@ -131,7 +131,7 @@ bool is_already_in_some_distillation_region(const std::vector<MultipleCellsOccup
 }
 
 
-void LayoutFromSpec::init_cache(const AsciiLayoutSpec& spec)
+void LayoutFromSpec::init_cache(const AsciiLayoutSpec& spec, const DistillationOptions& distillation_options)
 {
     cached_furthest_cell_ = spec.furthest_cell();
 
@@ -186,7 +186,9 @@ void LayoutFromSpec::init_cache(const AsciiLayoutSpec& spec)
 
             cached_distillation_regions_.push_back(new_distillation_region);
             cached_distilled_state_locations_.push_back(queue_for_new_region);
-            cached_distillation_times_.push_back(10);
+            cached_distillation_times_.push_back(distillation_options.distillation_time);
+            if (distillation_options.staggered)
+                cached_distillation_times_.back() += cached_distillation_regions_.size()-1;
 
         }
 
@@ -194,9 +196,9 @@ void LayoutFromSpec::init_cache(const AsciiLayoutSpec& spec)
 
     // TRL 01/25/23: An 'M' is only added to a distillation region's queue if it is adjacent to that region. Here we check if there are any left as 'r' and let the user know.
     if (magic_states_reserved_) {
-        int reserved_count = 0;
-        for (unsigned int i = 0; i < cached_distilled_state_locations_.size(); i++) {
-            for (unsigned int j = 0; j< cached_distilled_state_locations_[i].size(); j++) {
+        size_t reserved_count = 0;
+        for (size_t i = 0; i < cached_distilled_state_locations_.size(); i++) {
+            for (size_t j = 0; j< cached_distilled_state_locations_[i].size(); j++) {
                 reserved_count++;
             }
         }

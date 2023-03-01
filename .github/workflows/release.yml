@@ -31,9 +31,13 @@ jobs:
       - name: Create emscripten build
         run: |
           mkdir build
-          emcmake cmake -Bbuild -H.
+          emcmake cmake -Bbuild -H. -DCMAKE_BUILD_TYPE=MinSizeRel
           make -Cbuild
-          
+      
+      - name: Copy LICENSE
+        run: |
+          cp LICENSE npm/
+
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v3.1.0
         with:
@@ -46,6 +50,9 @@ jobs:
     name: Publish npm package
     runs-on: ubuntu-22.04
     needs: [npm-build]
+    if: |
+      github.repository_owner == 'latticesurgery-com' && 
+      github.repository == 'latticesurgery-com/liblsqecc'
 
     steps:
       - name: Setup Node JS
@@ -61,6 +68,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: tsc
+        run: npm run build
 
       - name: Publish package
         run: npm publish

@@ -13,9 +13,19 @@ The Liblsqecc package is part of the Lattice Surgery compiler project. It's a to
 
 ![](https://user-images.githubusercontent.com/36427091/193476068-eddfea28-3d91-4398-8de4-3a55bb43faa7.gif)
 
-Read more about the project in [it's paper](https://arxiv.org/abs/2302.02459) and on https://latticesurgery.com, or contribute [on github](https://github.com/latticesurgery-com/).
+Read more about the project in [its paper](https://arxiv.org/abs/2302.02459) and on https://latticesurgery.com, or contribute [on github](https://github.com/latticesurgery-com/).
 
 
 ## How to use this package
 
-This package provides an interface to the Liblsqecc's executable target `lsqecc_slicer` though the `runSlicer` function. The type interface describes which options are available. For an overview of what the options do, please consult [executable's readme](https://github.com/latticesurgery-com/liblsqecc#the-lsqecc_slicer-executable).
+This package provides an interface to the Liblsqecc's executable target `lsqecc_slicer` though the `Slicer` class. The type interface describes which options are available. 
+
+```typescript
+import { Slicer } from "@lattice-surgery/liblsqecc";
+
+const slicer = await Slicer.load();
+
+const result = slicer.run(YOUR_CIRCUIT_AS_STRING, 'qasm');
+```
+
+For an overview of what the options do, please consult [executable's readme](https://github.com/latticesurgery-com/liblsqecc#the-lsqecc_slicer-executable).

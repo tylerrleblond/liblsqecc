@@ -105,9 +105,7 @@ DenseSlice::DenseSlice(const Layout& layout)
 {
 }
 
-// TRL 01/16/23: We use the EDPC layout flag to influence certain choices within this function
-// TRL 01/23/23: Changed to the "nostagger" flag with behavior noted in help.spec
-DenseSlice::DenseSlice(const lsqecc::Layout &layout, const tsl::ordered_set<PatchId> &core_qubit_ids, bool nostagger)
+DenseSlice::DenseSlice(const lsqecc::Layout &layout, const tsl::ordered_set<PatchId> &core_qubit_ids)
  : DenseSlice(layout)
 {
     if (layout.core_patches().size()<core_qubit_ids.size())
@@ -152,16 +150,9 @@ DenseSlice::DenseSlice(const lsqecc::Layout &layout, const tsl::ordered_set<Patc
         }
     }
     
-    size_t distillation_time_offset = 0;
     for(auto t : layout.distillation_times())
-        // TRL 01/16/22: Do not use a distillation time offset if edpclayout flag is provided
-        // TRL 01/23/23: Changed to the "nostagger" flag with behavior noted in help.spec
-        if (nostagger) {
-            time_to_next_magic_state_by_distillation_region.push_back(t);
-        }
-        else {
-            time_to_next_magic_state_by_distillation_region.push_back(t+distillation_time_offset++);           
-        }      
+        time_to_next_magic_state_by_distillation_region.push_back(t);
+
 }
 
 bool DenseSlice::is_cell_free(const Cell& cell) const

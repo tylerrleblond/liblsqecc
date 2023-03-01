@@ -35,7 +35,7 @@ Usage: lsqecc_slicer [options...]
 Options:
     -i, --input            File with input. If not provided will read LS Instructions from stdin
     -q, --qasm             File name of file with QASM. When not provided will read as LLI (not QASM)
-    -l, --layout           File name of file with layout spec. Defaults to simple layout if none is provided
+    -l, --layout           File name of file with layout spec, otherwise the layout is auto-generated (configure with -L)
     -o, --output           File name of output. When not provided outputs to stdout
     -f, --output-format    Requires -o, STDOUT output format: progress, noprogress, machine
     -t, --timeout          Set a timeout in seconds after which stop producing slices
@@ -45,8 +45,12 @@ Options:
     --printlli             Output LLI instead of JSONs
     --noslices             Do the slicing but don't write the slices out
     --cnotcorrections      Add Xs and Zs to correct the the negative outcomes: never (default), always
-    --compactlayout        Uses Litinski's compact layout, incompatible with -l
-    -h, --help             Shows this page           
+    --layoutgenerator, -L  Automatically generates a layout for the given number of qubits. Incompatible with -l. Options:
+                            - compact (default): Uses Litinski's Game of Surace Code compact layout (https://arxiv.org/abs/1808.02892)
+                            - edpc: Uses a layout specified in the EDPC paper by Beverland et. al. (https://arxiv.org/abs/2110.11493)
+    --nostagger            Turns off staggered distillation block timing
+    --disttime             Set the distillation time (default 10)
+    -h, --help             Shows this page        
 ```
 #### QASM Support (Experimental)
 LibLSQECC can parse a small subset of OpenQASM 2.0 instead of LLI, with restrictions below. We call this type of assembly OpenQASM--. In general OpenQASM-- should be valid OpenQASM, up to implementation defects. The rules are 
@@ -105,3 +109,17 @@ However due to the Haskell platform's own portability challenges and some low le
 Liblsqecc was primarily developed at Aalto University by [George Watkins](https://github.com/gwwatkin) under Dr. [Alexandru Paler](https://github.com/alexandrupaler)'s supervision, and is now maintained by George Watkins.
 
 A special thanks to [Tyler LeBlond](https://github.com/tylerrleblond) for adding the EDPC layout and other contributions.
+
+[Alex Nguyen](https://github.com/alexnguyenn) maintains the NPM package and associated infrastructure.
+
+## Citing
+
+Please cite as follows:
+```
+@article{watkins2023high,
+  title={A High Performance Compiler for Very Large Scale Surface Code Computations},
+  author={Watkins, George and Nguyen, Hoang Minh and Seshadri, Varun and Watkins, Keelan and Pearce, Steven and Lau, Hoi-Kwan and Paler, Alexandru},
+  journal={arXiv preprint arXiv:2302.02459},
+  year={2023}
+}
+```
