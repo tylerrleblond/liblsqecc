@@ -35,11 +35,12 @@ std::queue<LSInstruction> LSIinstructionFromGatesGenerator::make_cnot_instructio
     // Control is green -> smooth -> measures X otimes X
     // Target is red -> rough -> measures Z otimes Z
 
+    // TRL 03/14/23: Placing ancilla next to Z edge of control or X edge of target
     std::optional<PatchInit::PlaceNexTo> place_ancilla_next_to;
     if(cnot_ancilla_placement == gates::CNOTAncillaPlacement::ANCILLA_NEXT_TO_CONTROL)
-        place_ancilla_next_to = std::make_pair(control_id, PauliOperator::X);
+        place_ancilla_next_to = std::make_pair(control_id, PauliOperator::Z);
     else if(cnot_ancilla_placement == gates::CNOTAncillaPlacement::ANCILLA_NEXT_TO_TARGET)
-        place_ancilla_next_to = std::make_pair(target_id, PauliOperator::Z);
+        place_ancilla_next_to = std::make_pair(target_id, PauliOperator::X);
 
     std::queue<LSInstruction> next_instructions;
     PatchId ancilla_id = id_generator_.new_id();
