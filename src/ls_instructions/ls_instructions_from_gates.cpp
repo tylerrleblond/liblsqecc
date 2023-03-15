@@ -32,8 +32,8 @@ std::queue<LSInstruction> LSIinstructionFromGatesGenerator::make_cnot_instructio
         gates::CNOTAncillaPlacement cnot_ancilla_placement,
         CNOTCorrectionMode cnot_correction_mode)
 {
-    // Control is green -> smooth -> measures X otimes X
-    // Target is red -> rough -> measures Z otimes Z
+    // Control is green -> smooth -> measures Z otimes Z
+    // Target is red -> rough -> measures X otimes X
 
     // TRL 03/14/23: Placing ancilla next to Z edge of control or X edge of target
     std::optional<PatchInit::PlaceNexTo> place_ancilla_next_to;
