@@ -51,6 +51,8 @@ struct DenseSlice : public Slice
     // Return a cell of the placed patch
     // TRL 01/25/23: Added second argument to be consistent with 'bool distillation'
     Cell place_sparse_patch(const SparsePatch& sparse_patch, bool distillation);
+    // TRL 03/17/23: Added multi-patch cell functionality
+    void place_sparse_patch_multiple_patches(const SparsePatch& sparse_patch);
 
     void delete_patch_by_id(PatchId id);
 
