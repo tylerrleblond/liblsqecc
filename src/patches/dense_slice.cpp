@@ -114,6 +114,7 @@ DenseSlice::DenseSlice(const lsqecc::Layout &layout, const tsl::ordered_set<Patc
     auto core_qubit_ids_itr = core_qubit_ids.begin();
     for (const SparsePatch& p : layout.core_patches())
     {
+        if(core_qubit_ids_itr == core_qubit_ids.end()) break;
         // TRL 01/25/23: Added second argument to be consistent with 'bool distillation'
         Cell cell = place_sparse_patch(p,false);
         patch_at(cell)->id = *core_qubit_ids_itr++;
