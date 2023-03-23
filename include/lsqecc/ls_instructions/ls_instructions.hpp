@@ -22,90 +22,6 @@ struct DeclareLogicalQubitPatches{
     bool operator==(const DeclareLogicalQubitPatches&) const = default;
 };
 
-struct SinglePatchMeasurement {
-    PatchId target;
-    PauliOperator observable;
-    bool is_negative;
-
-    bool operator==(const SinglePatchMeasurement&) const = default;
-};
-
-struct MultiPatchMeasurement {
-    tsl::ordered_map<PatchId, PauliOperator> observable;
-    bool is_negative;
-
-    bool operator==(const MultiPatchMeasurement&) const = default;
-};
-
-struct PlaceNexTo {
-    PatchId target;
-    PauliOperator op;
-
-    bool operator==(const PlaceNexTo&) const = default;
-};
-
-struct PatchInit {
-    PatchId target;
-
-    enum class InitializeableStates : uint8_t {
-        Zero,
-        Plus
-    };
-
-    InitializeableStates state;
-    std::optional<PlaceNexTo> place_next_to = std::nullopt;
-
-    bool operator==(const PatchInit&) const = default;
-};
-// TRL 03/16/23: Implementing BellPairInit as a new LLI
-struct BellPairInit {
-    PatchId side1;
-    PatchId side2; 
-    PlaceNexTo loc1;
-    PlaceNexTo loc2;
-
-    bool operator==(const BellPairInit&) const = default;
-};
-
-struct MagicStateRequest {
-    PatchId target;
-
-    static const size_t DEFAULT_WAIT = 10;
-    bool operator==(const MagicStateRequest&) const = default;
-};
-
-
-struct RotateSingleCellPatch {
-    PatchId target;
-
-    bool operator==(const RotateSingleCellPatch&) const = default;
-};
-
-// TODO rename to transversal?
-struct SingleQubitOp {
-    PatchId target;
-
-    enum class Operator : uint8_t {
-        X = static_cast<uint8_t>(PauliOperator::X),
-        Z = static_cast<uint8_t>(PauliOperator::Z),
-        H,
-        S
-    };
-
-    Operator op;
-
-    bool operator==(const SingleQubitOp&) const = default;
-};
-
-// TRL 03/20/23: Updated to take a vector of SparsePatches
-struct BusyRegion{
-    RoutingRegion region;
-    size_t steps_to_clear;
-    std::vector<SparsePatch> state_after_clearing;
-
-    bool operator==(const BusyRegion&) const = default;
-};
-
 // TRL 03/22/23: First pass at a new IR for local instructions, which can depend on layout.
 // TRL 03/22/23: BellPrepare allocates two sides of a Bell pair at specified adjacent cells
 struct BellPrepare {
@@ -150,36 +66,6 @@ struct Move {
 
     bool operator==(const Move&) const = default;
 };
-
-struct LSInstruction {
-
-    static constexpr size_t DEFAULT_MAX_WAIT = 3; // Allows for rotations to finish
-
-    std::variant<
-            DeclareLogicalQubitPatches,
-            SinglePatchMeasurement,
-            MultiPatchMeasurement,
-            PatchInit,
-            // TRL 03/16/23: Implementing BellPairInit as a new LLI
-            BellPairInit,
-            MagicStateRequest,
-            SingleQubitOp,
-            RotateSingleCellPatch,
-            BusyRegion,
-            // TRL 03/22/23: For now, adding local instructions here so I can use them with the followup instructions technique
-            BellPrepare,
-            BellMeasure,
-            TwoPatchMeasure,
-            ExtendSplit,
-            Move
-            > operation;
-
-    size_t wait_at_most_for = DEFAULT_MAX_WAIT;
-
-    tsl::ordered_set<PatchId> get_operating_patches() const;
-    bool operator==(const LSInstruction&) const = default;
-};
-
 // TRL 03/22/23: First pass at a new IR for local instructions, which can depend on layout.
 struct LocalInstruction {
 
@@ -199,6 +85,116 @@ struct LocalInstruction {
     bool operator==(const LocalInstruction&) const = default;
 };
 
+struct SinglePatchMeasurement {
+    PatchId target;
+    PauliOperator observable;
+    bool is_negative;
+
+    bool operator==(const SinglePatchMeasurement&) const = default;
+};
+
+struct MultiPatchMeasurement {
+    tsl::ordered_map<PatchId, PauliOperator> observable;
+    bool is_negative;
+
+    bool operator==(const MultiPatchMeasurement&) const = default;
+};
+
+struct PlaceNexTo {
+    PatchId target;
+    PauliOperator op;
+
+    bool operator==(const PlaceNexTo&) const = default;
+};
+
+struct PatchInit {
+    PatchId target;
+
+    enum class InitializeableStates : uint8_t {
+        Zero,
+        Plus
+    };
+
+    InitializeableStates state;
+    std::optional<PlaceNexTo> place_next_to = std::nullopt;
+
+    bool operator==(const PatchInit&) const = default;
+};
+// TRL 03/16/23: Implementing BellPairInit as a new LLI
+struct BellPairInit {
+    PatchId side1;
+    PatchId side2; 
+    PlaceNexTo loc1;
+    PlaceNexTo loc2;
+    // TRL 03/23/23: Creating LocalInstruction vector
+    std::optional<std::vector<LocalInstruction>> local_instructions;
+    std::optional<unsigned int> counter;
+
+    bool operator==(const BellPairInit&) const = default;
+};
+
+struct MagicStateRequest {
+    PatchId target;
+
+    static const size_t DEFAULT_WAIT = 10;
+    bool operator==(const MagicStateRequest&) const = default;
+};
+
+
+struct RotateSingleCellPatch {
+    PatchId target;
+
+    bool operator==(const RotateSingleCellPatch&) const = default;
+};
+
+// TODO rename to transversal?
+struct SingleQubitOp {
+    PatchId target;
+
+    enum class Operator : uint8_t {
+        X = static_cast<uint8_t>(PauliOperator::X),
+        Z = static_cast<uint8_t>(PauliOperator::Z),
+        H,
+        S
+    };
+
+    Operator op;
+
+    bool operator==(const SingleQubitOp&) const = default;
+};
+
+// TRL 03/20/23: Updated to take a vector of SparsePatches
+struct BusyRegion{
+    RoutingRegion region;
+    size_t steps_to_clear;
+    std::vector<SparsePatch> state_after_clearing;
+
+    bool operator==(const BusyRegion&) const = default;
+};
+
+struct LSInstruction {
+
+    static constexpr size_t DEFAULT_MAX_WAIT = 3; // Allows for rotations to finish
+
+    std::variant<
+            DeclareLogicalQubitPatches,
+            SinglePatchMeasurement,
+            MultiPatchMeasurement,
+            PatchInit,
+            // TRL 03/16/23: Implementing BellPairInit as a new LLI
+            BellPairInit,
+            MagicStateRequest,
+            SingleQubitOp,
+            RotateSingleCellPatch,
+            BusyRegion
+            > operation;
+
+    size_t wait_at_most_for = DEFAULT_MAX_WAIT;
+
+    tsl::ordered_set<PatchId> get_operating_patches() const;
+    bool operator==(const LSInstruction&) const = default;
+};
+
 struct InMemoryLogicalLatticeComputation
 {
     tsl::ordered_set<PatchId> core_qubits;
@@ -207,6 +203,8 @@ struct InMemoryLogicalLatticeComputation
 
 
 std::ostream& operator<<(std::ostream& os, const LSInstruction& instruction);
+// TRL 03/23/23: 
+std::ostream& operator<<(std::ostream& os, const LocalInstruction& instruction);
 
 std::ostream& operator<<(std::ostream& os, const DeclareLogicalQubitPatches& instruction);
 std::ostream& operator<<(std::ostream& os, const SinglePatchMeasurement& instruction);
@@ -223,9 +221,9 @@ std::ostream& operator<<(std::ostream& os, const BusyRegion& instruction);
 // TRL 03/22/23: First pass at a new IR for local instructions
 std::ostream& operator<<(std::ostream& os, const BellPrepare& instruction);
 std::ostream& operator<<(std::ostream& os, const BellMeasure& instruction);
+std::ostream& operator<<(std::ostream& os, const Move& instruction);
 std::ostream& operator<<(std::ostream& os, const TwoPatchMeasure& instruction);
 std::ostream& operator<<(std::ostream& os, const ExtendSplit& instruction);
-std::ostream& operator<<(std::ostream& os, const Move& instruction);
 
 template <class T>
 struct LSInstructionPrint{};
