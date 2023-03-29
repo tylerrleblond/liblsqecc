@@ -254,7 +254,8 @@ InstructionApplicationResult try_apply_local_instruction(
 
 InstructionApplicationResult try_apply_instruction_direct_followup(
         DenseSlice& slice,
-        LSInstruction instruction,
+        // TRL 03/29/23: Pass instruction by reference and allow modification
+        LSInstruction& instruction,
         const Layout& layout,
         Router& router)
 {
@@ -380,13 +381,16 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
 
             // TRL 03/23/23: Update the LSInstruction itself
             // TRL 03/24/23: Using std::move at George's request
+            // TRL 03/29/23: Updated to use counter as a pair
             bell_init->local_instructions = std::move(local_instructions);
-            bell_init->counter = 0;
+            bell_init->counter = std::pair<unsigned int, unsigned int>(0, 0);
         }
 
         // TRL 03/23/23: Apply LocalInstructions
         // TRL 03/24/23: Removed if statement
-        for (unsigned int i = bell_init->counter.value(); i < bell_init->local_instructions.value().size(); i++)
+        // TRL 03/29/23: Updated to use counter as a pair
+        bell_init->counter->first = bell_init->counter->second;
+        for (unsigned int i = bell_init->counter->first; i < bell_init->local_instructions.value().size(); i++)
         {
             InstructionApplicationResult r = try_apply_local_instruction(slice, bell_init->local_instructions.value()[i], layout, router);
             if (r.maybe_error && r.followup_instructions.empty())
@@ -394,7 +398,7 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
             else if (!r.followup_instructions.empty())
                 return InstructionApplicationResult{std::make_unique<std::runtime_error>("Followup local instructions not implemented"), {}};
 
-            bell_init->counter.value()++;
+            bell_init->counter->second++;
         }
 
         /* The code for the case that we leave the region busy for two time steps and then create ancillae in the appropriate locations
@@ -513,7 +517,8 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
 
 InstructionApplicationResult try_apply_instruction_with_followup_attempts(
         DenseSlice& slice,
-        const LSInstruction& instruction,
+        // TRL 03/29/23: Pass instruction by reference and allow modification
+        LSInstruction& instruction,
         const Layout& layout,
         Router& router)
 {
@@ -610,7 +615,8 @@ void run_through_dense_slices_dag(
         auto proximate_instructions = dag.proximate_instructions();
         for (dag::label_t instruction_label: proximate_instructions)
         {
-            const LSInstruction& instruction = dag.at(instruction_label);
+            // TRL 03/29/23: Removing const label
+            LSInstruction& instruction = dag.at(instruction_label);
             auto application_result = try_apply_instruction_direct_followup(slice, instruction, layout, router);
             if (application_result.maybe_error)
                 throw std::runtime_error{lstk::cat(
@@ -631,7 +637,8 @@ void run_through_dense_slices_dag(
         auto non_proximate_instructions = dag.applicable_instructions();
         for (dag::label_t instruction_label: non_proximate_instructions)
         {
-            const LSInstruction& instruction = dag.at(instruction_label);
+            // TRL 03/29/23: Removing const label
+            LSInstruction& instruction = dag.at(instruction_label);
             auto application_result = try_apply_instruction_direct_followup(slice, instruction, layout, router);
             if (application_result.maybe_error)
             {
