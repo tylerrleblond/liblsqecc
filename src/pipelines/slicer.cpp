@@ -68,7 +68,11 @@ namespace lsqecc
     {
         None, BeforeSlicing, Sliced
     };
-
+    // TRL 04/04/23: Creating local instructions mode
+    enum class CompilationMode
+    {
+        Local, Nonlocal
+    };
 
     DistillationOptions make_distillation_options(argparse::ArgumentParser& parser)
     {
@@ -167,6 +171,11 @@ namespace lsqecc
         parser.add_argument()
                 .names({"--disttime"})
                 .description("Set the distillation time (default 10)")
+                .required(false);
+        // TRL 04/04/23: Local instructions are a command line argument
+        parser.add_argument()
+                .names({"--local"})
+                .description("Compile gates using a local lattice surgery instruction set")
                 .required(false);
         parser.enable_help();
 
@@ -366,6 +375,11 @@ namespace lsqecc
             dag.to_graphviz(out_stream);
             return 0;
         }
+        
+        // TRL 04/04/23: Implementing compilation mode (future should make mutually exclusive with PauliCorrections flag)
+        CompilationMode compile_mode = CompilationMode::Nonlocal;
+        if (parser.exists("local"))
+            compile_mode = CompilationMode::Local;
 
         auto timeout = parser.exists("t") ?
                        std::make_optional(std::chrono::seconds{parser.get<uint32_t>("t")})
@@ -461,6 +475,8 @@ namespace lsqecc
             std::make_unique<DensePatchComputationResult>(run_through_dense_slices(
                     std::move(*instruction_stream),
                     pipeline_mode == PipelineMode::Dag,
+                    // TRL 04/04/23: Using compilation flag
+                    compile_mode == CompilationMode::Local,
                     *layout,
                     *router,
                     timeout,

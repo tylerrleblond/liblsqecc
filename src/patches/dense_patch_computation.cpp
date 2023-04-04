@@ -236,10 +236,28 @@ InstructionApplicationResult try_apply_local_instruction(
 
         return {nullptr, {}};
     }
-    else if (const auto* s = std::get_if<LocalInstruction::TwoPatchMeasure>(&instruction.operation))
+    // TRL 04/04/23: Implementing TwoPatchMeasure LocalInstruction
+    else if (const auto* localmeas = std::get_if<LocalInstruction::TwoPatchMeasure>(&instruction.operation))
     {
-        // Not yet implemented
-        return {std::make_unique<std::runtime_error>("TwoPatchMeasure not yet implemented"), {}};
+        if (slice.patch_at(localmeas->cell1)->is_active())
+        {
+            return {std::make_unique<std::runtime_error>(lstk::cat("Patch at ", localmeas->cell1, " is active")), {}};
+        }
+        else if (slice.patch_at(localmeas->cell2)->is_active())
+        {
+            return {std::make_unique<std::runtime_error>(lstk::cat("Patch at ", localmeas->cell2, " is active")), {}};
+        }
+        if (slice.get_boundary_between(localmeas->cell1, localmeas->cell2).has_value())
+        {
+            slice.get_boundary_between(localmeas->cell1,localmeas->cell2)->get().is_active=true;
+            slice.get_boundary_between(localmeas->cell2,localmeas->cell1)->get().is_active=true;
+
+            return {nullptr, {}};
+        }
+        else
+        {
+            throw std::logic_error("LocalInstruction::TwoPatchMeasure called on a boundary that does not exist");
+        }
     }
     else if (const auto* s = std::get_if<LocalInstruction::ExtendSplit>(&instruction.operation))
     {
@@ -256,6 +274,8 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
         DenseSlice& slice,
         // TRL 03/29/23: Pass instruction by reference and allow modification
         LSInstruction& instruction,
+        // TRL 04/04/23: Using compilation flag
+        bool local_instructions,
         const Layout& layout,
         Router& router)
 {
@@ -310,12 +330,36 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
 
         if (!slice.has_patch(source_id))
             return {std::make_unique<std::runtime_error>(lstk::cat("Patch ", source_id, " not on lattice")), {}};
-        if (!slice.has_patch(target_id))
+        if (!slice.has_patch(target_id)) 
             return {std::make_unique<std::runtime_error>(lstk::cat("Patch ", target_id, " not on lattice")), {}};
 
-        if (!merge_patches(slice, router, source_id, source_op, target_id, target_op))
-            return {std::make_unique<std::runtime_error>(lstk::cat("Couldn't find room to route:\n", *m)), {}};
-        return {nullptr, {}};
+        // TRL 04/04/23: logic depending on local_instructions
+        if (!local_instructions) 
+        {
+            if (!merge_patches(slice, router, source_id, source_op, target_id, target_op))
+                return {std::make_unique<std::runtime_error>(lstk::cat("Couldn't find room to route:\n", *m)), {}};
+            return {nullptr, {}};
+        }
+        else
+        {
+            //TRL 04/04/23: For now, construct TwoPatchMeasure instruction and apply it; later might want to generalize to break up longer ops
+            {
+                std::vector<LocalInstruction::LSInstruction> local_instructions;
+                local_instructions.push_back({LocalInstruction::TwoPatchMeasure{slice.get_cell_by_id(source_id).value(), slice.get_cell_by_id(target_id).value()}});
+                InstructionApplicationResult r = try_apply_local_instruction(slice, local_instructions[0], layout, router);
+                // TRL 04/04/23: Issue here with error handling since, if not able to place immediately, the instruction_visitor will hit it every time.
+                // TRL 04/04/23: Also, the code will not crash after three attempts since a nullptr is being returned
+                // TRL 04/04/23: These issues are also relevant for BellPairInit
+                if (r.maybe_error && r.followup_instructions.empty())
+                    return InstructionApplicationResult{nullptr, {instruction}};
+                if (!r.followup_instructions.empty())
+                    return InstructionApplicationResult{std::make_unique<std::runtime_error>("Followup local instructions not implemented"), {}};
+                return {nullptr, {}};
+            }
+
+        }
+
+
     }
     else if (const auto* init = std::get_if<PatchInit>(&instruction.operation))
     {
@@ -334,92 +378,104 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
     // TRL 03/16/23: Implementing BellPairInit as a new LLI
     else if (auto* bell_init = std::get_if<BellPairInit>(&instruction.operation)) 
     {
-        // TRL 03/23/23: If the counter has not been instantiated
-        // TRL 03/24/23: Updated to use has_value
-        if (!bell_init->counter.has_value())
+
+        // TRL 04/04/23: Implementing logic for logical instructions flag
+        if (!local_instructions)
         {
             // TRL 03/17/23: Find a route between the edges of the patches that the sides of the Bell pair should be placed next to
             auto routing_region = router.find_routing_ancilla(slice, bell_init->loc1.target, bell_init->loc1.op, bell_init->loc2.target, bell_init->loc2.op);
-            if(!routing_region) 
-            {
+            if(!routing_region) {
                 return {std::make_unique<std::runtime_error>(lstk::cat("No valid route found for Bell pair creation: ",
                     bell_init->loc1.target, ":", PauliOperator_to_string(bell_init->loc1.op), ",",
                     bell_init->loc2.target, ":", PauliOperator_to_string(bell_init->loc2.op))), {}};
             }
-            // TRL 03/22/23: Realized that some corner cases need to be resolved; just crashing for now
-            else if (routing_region->cells.size() < 2) 
-            {
-                return {std::make_unique<std::runtime_error>(lstk::cat("Shortest route cannot be used for Bell pair creation: ",
-                    bell_init->loc1.target, ":", PauliOperator_to_string(bell_init->loc1.op), ",",
-                    bell_init->loc2.target, ":", PauliOperator_to_string(bell_init->loc2.op))), {}};
-            }
 
-            // TRL 03/22/23: Construct LocalInstructions based on route
-            std::vector<LocalInstruction::LSInstruction> local_instructions;
-            // TRL 03/24/23: Reserve space for at least as many instructions as are cells in the routing region
-            local_instructions.reserve(routing_region->cells.size());
-            // TRL 03/30/23: Generalizing for case of routing region size of 2
-            std::optional<PatchId> id1; std::optional<PatchId> id2;
-            for (size_t i=0; i<routing_region->cells.size()-1; i=i+2)
-            {
-                // Push a BellPrepare instruction with PatchID's depending on the case
-                id1 = std::nullopt; id2 = std::nullopt;
-                if (i==0) 
-                    id1 = bell_init->side2;
-                if (i==routing_region->cells.size()-2)
-                    id2 = bell_init->side1;
+            // TRL 03/17/23: Apply route 
+            apply_routing_region(slice, *routing_region);
 
-                local_instructions.push_back({LocalInstruction::BellPrepare{id1, id2, routing_region->cells[i].cell, routing_region->cells[i+1].cell}});
-            }
-            for (size_t i=2; i<routing_region->cells.size()-1; i=i+2)
-            {
-                // Push a complementary layer of BellMeasure instructions
-                local_instructions.push_back({LocalInstruction::BellMeasure{routing_region->cells[i-1].cell, routing_region->cells[i].cell}});
-            }
-            // Take care of the case of an odd route
-            if ((routing_region->cells.size()%2 == 1))
-            {
-                local_instructions.push_back({LocalInstruction::Move{bell_init->side1, routing_region->cells[routing_region->cells.size()-2].cell, routing_region->cells[routing_region->cells.size()-1].cell}});
-            }
+            // TRL 03/17/23: Make the routing region busy for the appropriate number of time steps and then place ancillae in first and last
+            std::vector<SparsePatch> bell_state;
+            bell_state.push_back(LayoutHelpers::basic_square_patch(routing_region->cells.back().cell));
+            bell_state.push_back(LayoutHelpers::basic_square_patch(routing_region->cells.front().cell));
+            bell_state[0].id = bell_init->side1; bell_state[1].id = bell_init->side2;
+            return {nullptr, {{{BusyRegion{routing_region.value(), 1, bell_state}}}}};
 
-            // TRL 03/23/23: Update the LSInstruction itself
-            // TRL 03/24/23: Using std::move at George's request
-            // TRL 03/29/23: Updated to use counter as a pair
-            bell_init->local_instructions = std::move(local_instructions);
-            bell_init->counter = std::pair<unsigned int, unsigned int>(0, 0);
+            // TRL 04/04/23: May be worth returning to insert Pauli corrections
+            // TRL 04/04/23: It also looks like the boundary between logical qubits and routing region is colored in 
         }
-
-        // TRL 03/23/23: Apply LocalInstructions
-        // TRL 03/24/23: Removed if statement
-        // TRL 03/29/23: Updated to use counter as a pair
-        bell_init->counter->first = bell_init->counter->second;
-        for (unsigned int i = bell_init->counter->first; i < bell_init->local_instructions.value().size(); i++)
+        else 
         {
-            InstructionApplicationResult r = try_apply_local_instruction(slice, bell_init->local_instructions.value()[i], layout, router);
-            if (r.maybe_error && r.followup_instructions.empty())
-                return InstructionApplicationResult{nullptr, {instruction}};
-            if (!r.followup_instructions.empty())
-                return InstructionApplicationResult{std::make_unique<std::runtime_error>("Followup local instructions not implemented"), {}};
+            // TRL 03/23/23: If the counter has not been instantiated
+            // TRL 03/24/23: Updated to use has_value
+            if (!bell_init->counter.has_value())
+            {
+                // TRL 03/17/23: Find a route between the edges of the patches that the sides of the Bell pair should be placed next to
+                auto routing_region = router.find_routing_ancilla(slice, bell_init->loc1.target, bell_init->loc1.op, bell_init->loc2.target, bell_init->loc2.op);
+                if(!routing_region) 
+                {
+                    return {std::make_unique<std::runtime_error>(lstk::cat("No valid route found for Bell pair creation: ",
+                        bell_init->loc1.target, ":", PauliOperator_to_string(bell_init->loc1.op), ",",
+                        bell_init->loc2.target, ":", PauliOperator_to_string(bell_init->loc2.op))), {}};
+                }
+                // TRL 03/22/23: Realized that some corner cases need to be resolved; just crashing for now
+                else if (routing_region->cells.size() < 2) 
+                {
+                    return {std::make_unique<std::runtime_error>(lstk::cat("Shortest route cannot be used for Bell pair creation: ",
+                        bell_init->loc1.target, ":", PauliOperator_to_string(bell_init->loc1.op), ",",
+                        bell_init->loc2.target, ":", PauliOperator_to_string(bell_init->loc2.op))), {}};
+                }
 
-            bell_init->counter->second++;
+                // TRL 03/22/23: Construct LocalInstructions based on route
+                std::vector<LocalInstruction::LSInstruction> local_instructions;
+                // TRL 03/24/23: Reserve space for at least as many instructions as are cells in the routing region
+                local_instructions.reserve(routing_region->cells.size());
+                // TRL 03/30/23: Generalizing for case of routing region size of 2
+                std::optional<PatchId> id1; std::optional<PatchId> id2;
+                for (size_t i=0; i<routing_region->cells.size()-1; i=i+2)
+                {
+                    // Push a BellPrepare instruction with PatchID's depending on the case
+                    id1 = std::nullopt; id2 = std::nullopt;
+                    if (i==0) 
+                        id1 = bell_init->side2;
+                    if (i==routing_region->cells.size()-2)
+                        id2 = bell_init->side1;
+
+                    local_instructions.push_back({LocalInstruction::BellPrepare{id1, id2, routing_region->cells[i].cell, routing_region->cells[i+1].cell}});
+                }
+                for (size_t i=2; i<routing_region->cells.size()-1; i=i+2)
+                {
+                    // Push a complementary layer of BellMeasure instructions
+                    local_instructions.push_back({LocalInstruction::BellMeasure{routing_region->cells[i-1].cell, routing_region->cells[i].cell}});
+                }
+                // Take care of the case of an odd route
+                if ((routing_region->cells.size()%2 == 1))
+                {
+                    local_instructions.push_back({LocalInstruction::Move{bell_init->side1, routing_region->cells[routing_region->cells.size()-2].cell, routing_region->cells[routing_region->cells.size()-1].cell}});
+                }
+
+                // TRL 03/23/23: Update the LSInstruction itself
+                // TRL 03/24/23: Using std::move at George's request
+                // TRL 03/29/23: Updated to use counter as a pair
+                bell_init->local_instructions = std::move(local_instructions);
+                bell_init->counter = std::pair<unsigned int, unsigned int>(0, 0);
+            }
+
+            // TRL 03/23/23: Apply LocalInstructions
+            // TRL 03/24/23: Removed if statement
+            // TRL 03/29/23: Updated to use counter as a pair
+            bell_init->counter->first = bell_init->counter->second;
+            for (unsigned int i = bell_init->counter->first; i < bell_init->local_instructions.value().size(); i++)
+            {
+                InstructionApplicationResult r = try_apply_local_instruction(slice, bell_init->local_instructions.value()[i], layout, router);
+                if (r.maybe_error && r.followup_instructions.empty())
+                    return InstructionApplicationResult{nullptr, {instruction}};
+                if (!r.followup_instructions.empty())
+                    return InstructionApplicationResult{std::make_unique<std::runtime_error>("Followup local instructions not implemented"), {}};
+
+                bell_init->counter->second++;
+            }
+            return {nullptr, {}};
         }
-
-        /* The code for the case that we leave the region busy for two time steps and then create ancillae in the appropriate locations
-        // TRL 03/17/23: Apply route 
-        apply_routing_region(slice, *routing_region);
-
-        // TRL 03/17/23: Make the routing region busy for the appropriate number of time steps and then place ancillae in first and last
-        std::vector<SparsePatch> bell_state;
-        bell_state.push_back(LayoutHelpers::basic_square_patch(routing_region->cells.back().cell));
-        bell_state.push_back(LayoutHelpers::basic_square_patch(routing_region->cells.front().cell));
-        bell_state[0].id = bell_init->side1; bell_state[1].id = bell_init->side2;
-        return {nullptr, {{{BusyRegion{routing_region.value(), 1, bell_state}}}}};
-        */
-
-        return {nullptr, {}};
-
-        // TRL 03/17/23: Implement options for compiling to local vs nonlocal instruction sets
-
     }
     else if (const auto* rotation = std::get_if<RotateSingleCellPatch>(&instruction.operation))
     {
@@ -523,10 +579,13 @@ InstructionApplicationResult try_apply_instruction_with_followup_attempts(
         DenseSlice& slice,
         // TRL 03/29/23: Pass instruction by reference and allow modification
         LSInstruction& instruction,
+        // TRL 04/04/23: Using compilation flag
+        bool local_instructions,
         const Layout& layout,
         Router& router)
 {
-    InstructionApplicationResult r = try_apply_instruction_direct_followup(slice, instruction, layout, router);
+    // TRL 04/04/23: Using compilation flag
+    InstructionApplicationResult r = try_apply_instruction_direct_followup(slice, instruction, local_instructions, layout, router);
     if (r.maybe_error && r.followup_instructions.empty())
         // TRL 03/30/23: Returning the error here should fix a few bugs including repeated instructions in --printlli and non-crashing
         return InstructionApplicationResult{std::move(r.maybe_error), followup_next_attempt(instruction)};
@@ -537,6 +596,8 @@ InstructionApplicationResult try_apply_instruction_with_followup_attempts(
 
 void run_through_dense_slices_streamed(
         LSInstructionStream&& instruction_stream,
+        // TRL 04/04/23: Using compilation flag
+        bool local_instructions,
         const Layout& layout,
         Router& router,
         std::optional<std::chrono::seconds> timeout,
@@ -557,8 +618,8 @@ void run_through_dense_slices_streamed(
             res.ls_instructions_count_++;
             return instruction_stream.get_next_instruction();
         }();
-
-        auto application_result = try_apply_instruction_with_followup_attempts(slice, instruction, layout, router);
+        // TRL 04/04/23: Using compilation flag
+        auto application_result = try_apply_instruction_with_followup_attempts(slice, instruction, local_instructions, layout, router);
         if (!application_result.maybe_error)
             instruction_visitor(instruction);
 
@@ -584,6 +645,8 @@ void run_through_dense_slices_streamed(
 void run_through_dense_slices_dag(
         dag::DependencyDag<LSInstruction>&& dag,
         const tsl::ordered_set<PatchId>& core_qubits,
+        // TRL 04/04/23: Using compilation flag
+        bool local_instructions,
         const Layout& layout,
         Router& router,
         std::optional<std::chrono::seconds> timeout,
@@ -622,7 +685,8 @@ void run_through_dense_slices_dag(
         {
             // TRL 03/29/23: Removing const label
             LSInstruction& instruction = dag.at(instruction_label);
-            auto application_result = try_apply_instruction_direct_followup(slice, instruction, layout, router);
+            // TRL 04/04/23: Using compilation flag
+            auto application_result = try_apply_instruction_direct_followup(slice, instruction, local_instructions, layout, router);
             if (application_result.maybe_error)
                 throw std::runtime_error{lstk::cat(
                     "Could not apply proximate instruction:\n",
@@ -644,7 +708,8 @@ void run_through_dense_slices_dag(
         {
             // TRL 03/29/23: Removing const label
             LSInstruction& instruction = dag.at(instruction_label);
-            auto application_result = try_apply_instruction_direct_followup(slice, instruction, layout, router);
+            // TRL 04/04/23: Using compilation flag
+            auto application_result = try_apply_instruction_direct_followup(slice, instruction, local_instructions, layout, router);
             if (application_result.maybe_error)
             {
                 increment_attepmts(instruction_label);
@@ -678,6 +743,8 @@ void run_through_dense_slices_dag(
 DensePatchComputationResult run_through_dense_slices(
         LSInstructionStream&& instruction_stream,
         bool dag_pipeline,
+        // TRL 04/04/23: Using compilation flag
+        bool local_instructions,
         const Layout& layout,
         Router& router,
         std::optional<std::chrono::seconds> timeout,
@@ -715,6 +782,8 @@ DensePatchComputationResult run_through_dense_slices(
             return run_through_dense_slices_dag(
                 std::move(dag),
                 instruction_stream.core_qubits(),
+                // TRL 04/04/23: Using compilation flag
+                local_instructions,
                 layout,
                 router,
                 timeout,
@@ -727,6 +796,8 @@ DensePatchComputationResult run_through_dense_slices(
         {
             return run_through_dense_slices_streamed(
                 std::move(instruction_stream),
+                // TRL 04/04/23: Using compilation flag
+                local_instructions,
                 layout,
                 router,
                 timeout,
