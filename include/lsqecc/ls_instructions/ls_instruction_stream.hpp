@@ -54,7 +54,9 @@ public:
     LSInstructionStreamFromGateStream(
             GateStream& gate_stream, // TODO why is this not rvalue ref?
             CNOTCorrectionMode cnot_correction_mode,
-            IdGenerator& id_generator
+            IdGenerator& id_generator,
+            // TRL 04/04/23: Adding local_instructions option to help control gate compilation
+            bool local_instructions
             );
 
     LSInstruction get_next_instruction() override;

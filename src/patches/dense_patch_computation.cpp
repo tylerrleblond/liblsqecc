@@ -378,6 +378,12 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
     // TRL 03/16/23: Implementing BellPairInit as a new LLI
     else if (auto* bell_init = std::get_if<BellPairInit>(&instruction.operation)) 
     {
+        std::cerr << "Bellprep" << 1 << std::endl;
+        // TRL 04/05/23: Adding logic for missing patches
+        if (!slice.has_patch(bell_init->loc1.target))
+            return {std::make_unique<std::runtime_error>(lstk::cat("Patch ", bell_init->loc1.target, " not on lattice")), {}};
+        if (!slice.has_patch(bell_init->loc2.target)) 
+            return {std::make_unique<std::runtime_error>(lstk::cat("Patch ", bell_init->loc2.target, " not on lattice")), {}};
 
         // TRL 04/04/23: Implementing logic for logical instructions flag
         if (!local_instructions)
@@ -424,7 +430,6 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
                         bell_init->loc1.target, ":", PauliOperator_to_string(bell_init->loc1.op), ",",
                         bell_init->loc2.target, ":", PauliOperator_to_string(bell_init->loc2.op))), {}};
                 }
-
                 // TRL 03/22/23: Construct LocalInstructions based on route
                 std::vector<LocalInstruction::LSInstruction> local_instructions;
                 // TRL 03/24/23: Reserve space for at least as many instructions as are cells in the routing region
@@ -452,7 +457,6 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
                 {
                     local_instructions.push_back({LocalInstruction::Move{bell_init->side1, routing_region->cells[routing_region->cells.size()-2].cell, routing_region->cells[routing_region->cells.size()-1].cell}});
                 }
-
                 // TRL 03/23/23: Update the LSInstruction itself
                 // TRL 03/24/23: Using std::move at George's request
                 // TRL 03/29/23: Updated to use counter as a pair
@@ -708,10 +712,12 @@ void run_through_dense_slices_dag(
         {
             // TRL 03/29/23: Removing const label
             LSInstruction& instruction = dag.at(instruction_label);
+            std::cerr << instruction << std::endl;
             // TRL 04/04/23: Using compilation flag
             auto application_result = try_apply_instruction_direct_followup(slice, instruction, local_instructions, layout, router);
             if (application_result.maybe_error)
             {
+                std::cerr << application_result.maybe_error->what() << std::endl;
                 increment_attepmts(instruction_label);
                 if (attempts_per_instruction[instruction_label] > MAX_INSTRUCTION_APPLICATION_RETRIES_DAG_PIPELINE)
                 {
