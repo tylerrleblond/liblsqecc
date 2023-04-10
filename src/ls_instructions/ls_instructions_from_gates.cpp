@@ -26,7 +26,7 @@ std::queue<LSInstruction> LSIinstructionFromGatesGenerator::make_t_gate_instruct
         next_instructions.push({.operation={SinglePatchMeasurement{new_magic_state_id, PauliOperator::Z, false}}});
 
         // TRL 04/04/23: We assume S correction always occurs (worst-case estimate)
-        // next_instructions.push({.operation={SingleQubitOp{target_id, SingleQubitOp::Operator::S}}});
+        next_instructions.push({.operation={SingleQubitOp{target_id, SingleQubitOp::Operator::S}}});
     }
     else 
     {
