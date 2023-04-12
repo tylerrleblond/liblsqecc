@@ -22,6 +22,8 @@ struct Layout {
     virtual const std::vector<Cell>& ancilla_location() const = 0;
     // TRL 01/24/23: Function to return vector of dead cells; adding here as well as in LayoutFromSpec to make everything consistent
     virtual const std::vector<Cell>& dead_location() const = 0;
+    // TRL 04/10/23: Function to return distilled Y states
+    virtual const std::vector<Cell>& y_states() const = 0;
     // TRL 01/25/23: Creating a boolean to designate whether or not magic states are reserved
     virtual const bool magic_states_reserved() const = 0;
 

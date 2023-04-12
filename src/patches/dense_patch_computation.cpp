@@ -347,11 +347,12 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
                 std::vector<LocalInstruction::LSInstruction> local_instructions;
                 local_instructions.push_back({LocalInstruction::TwoPatchMeasure{slice.get_cell_by_id(source_id).value(), slice.get_cell_by_id(target_id).value()}});
                 InstructionApplicationResult r = try_apply_local_instruction(slice, local_instructions[0], layout, router);
+                // TRL 04/11/23: The below issues were mitigated by returning the error itself and no follow-up instructions, still need to consider for BellPairInit
                 // TRL 04/04/23: Issue here with error handling since, if not able to place immediately, the instruction_visitor will hit it every time.
-                // TRL 04/04/23: Also, the code will not crash after three attempts since a nullptr is being returned
+                // TRL 04/04/23: Also, the code will not crash after three attempts (i.e. it will just move on) since a nullptr is being returned instead of an error message
                 // TRL 04/04/23: These issues are also relevant for BellPairInit
                 if (r.maybe_error && r.followup_instructions.empty())
-                    return InstructionApplicationResult{nullptr, {instruction}};
+                    return InstructionApplicationResult{std::move(r.maybe_error), {}};
                 if (!r.followup_instructions.empty())
                     return InstructionApplicationResult{std::make_unique<std::runtime_error>("Followup local instructions not implemented"), {}};
                 return {nullptr, {}};
@@ -378,7 +379,6 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
     // TRL 03/16/23: Implementing BellPairInit as a new LLI
     else if (auto* bell_init = std::get_if<BellPairInit>(&instruction.operation)) 
     {
-        std::cerr << "Bellprep" << 1 << std::endl;
         // TRL 04/05/23: Adding logic for missing patches
         if (!slice.has_patch(bell_init->loc1.target))
             return {std::make_unique<std::runtime_error>(lstk::cat("Patch ", bell_init->loc1.target, " not on lattice")), {}};
@@ -497,6 +497,12 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
             return {std::make_unique<std::runtime_error>(lstk::cat(
                     "Cannot rotate patch ", rotation->target, ": has no free neighbour")), {}};
 
+        // TRL 04/12/23: I notice that this does code not check whether the patch is active here.. not sure about that, but I think we should clear the unitary
+        if (slice.patch_at(target_cell)->activity == PatchActivity::Unitary)
+        {
+            slice.patch_at(target_cell)->activity = PatchActivity::None;
+        }
+
         auto stages{LayoutHelpers::single_patch_rotation_a_la_litinski(
                 slice.patch_at(target_cell)->to_sparse_patch(target_cell), *free_neighbour)};
 
@@ -526,6 +532,34 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
             return {std::make_unique<std::runtime_error>(
                     std::string{"Could not get magic state"}), {}};
 
+    }
+    // TRL 04/11/23: Implementing YStateRequest as a new LLI
+    else if (auto* yr = std::get_if<YStateRequest>(&instruction.operation))
+    {
+        std::optional<Cell> min_cell;
+        double min_dist = 9999; 
+        double dist;
+        // Get minimum distance available Y state patch
+        for (const Cell& cell : layout.y_states())
+        {
+            dist = sqrt(pow(cell.col - slice.get_cell_by_id(yr->near_patch).value().col, 2) + pow(cell.row - slice.get_cell_by_id(yr->near_patch).value().row, 2));
+            if ((dist < min_dist) && !slice.patch_at(cell)->is_active())
+            {
+                min_dist = dist;
+                min_cell = cell;
+            }
+        }
+
+        if (min_cell)
+        {
+            slice.patch_at(min_cell.value()).value().id = yr->target;
+            return {nullptr, {}};
+        }
+        else 
+        {
+            return {std::make_unique<std::runtime_error>(
+                    std::string{"Could not get Y state"}), {}};           
+        }
     }
     else if (auto* busy_region = std::get_if<BusyRegion>(&instruction.operation))
     {
@@ -712,12 +746,10 @@ void run_through_dense_slices_dag(
         {
             // TRL 03/29/23: Removing const label
             LSInstruction& instruction = dag.at(instruction_label);
-            std::cerr << instruction << std::endl;
             // TRL 04/04/23: Using compilation flag
             auto application_result = try_apply_instruction_direct_followup(slice, instruction, local_instructions, layout, router);
             if (application_result.maybe_error)
             {
-                std::cerr << application_result.maybe_error->what() << std::endl;
                 increment_attepmts(instruction_label);
                 if (attempts_per_instruction[instruction_label] > MAX_INSTRUCTION_APPLICATION_RETRIES_DAG_PIPELINE)
                 {

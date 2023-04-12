@@ -38,7 +38,8 @@ std::unique_ptr<Layout> make_edpc_layout(size_t num_core_qubits, const Distillat
             if ((i-t_distillation_region_rows)%2==0 && (j-t_distillation_region_cols)%2==0) {
                 if (i == t_distillation_region_rows || j == t_distillation_region_cols 
                     || i == grid.size()-t_distillation_region_rows -1 || j == grid[i].size() -t_distillation_region_cols -1) {
-                    grid[i][j] = AsciiLayoutSpec::CellType::AncillaQubitLocation;
+                    // TRL 04/10/23: Updated to include pre-distilled y states
+                    grid[i][j] = AsciiLayoutSpec::CellType::PreDistilledYState;
                 }
                 else {
                     if (logical_placed < num_core_qubits) {
@@ -46,7 +47,7 @@ std::unique_ptr<Layout> make_edpc_layout(size_t num_core_qubits, const Distillat
                         logical_placed++;
                     }
                     else {
-                        grid[i][j] = AsciiLayoutSpec::CellType::AncillaQubitLocation;
+                        grid[i][j] = AsciiLayoutSpec::CellType::PreDistilledYState;
                     }
                 }
             }
@@ -57,7 +58,7 @@ std::unique_ptr<Layout> make_edpc_layout(size_t num_core_qubits, const Distillat
     size_t a_count = 0;
     size_t i = t_distillation_region_rows;
     for (size_t j = t_distillation_region_cols; j<grid[i].size()-t_distillation_region_cols; j++) {
-        if (grid[i][j] == 'A') {
+        if (grid[i][j] == 'Y') {
             a_count++;
             if (a_count%2 == 0) {
                 grid[i][j] = AsciiLayoutSpec::CellType::ReservedForMagicState;
@@ -74,7 +75,7 @@ std::unique_ptr<Layout> make_edpc_layout(size_t num_core_qubits, const Distillat
     a_count = 0;
     i = grid.size() - t_distillation_region_rows - 1;
     for (size_t j = t_distillation_region_cols; j<grid[i].size()-t_distillation_region_cols; j++) {
-        if (grid[i][j] == 'A') {
+        if (grid[i][j] == 'Y') {
             a_count++;
             if (a_count%2 == 0) {
                 grid[i][j] = AsciiLayoutSpec::CellType::ReservedForMagicState;
@@ -91,7 +92,7 @@ std::unique_ptr<Layout> make_edpc_layout(size_t num_core_qubits, const Distillat
     a_count = 0;
     size_t j = t_distillation_region_cols;
     for (size_t i = t_distillation_region_rows; i<grid.size()-t_distillation_region_rows; i++) {
-        if (grid[i][j] == 'A') {
+        if (grid[i][j] == 'Y') {
             a_count++;
             if (a_count%2 == 0) {
                 grid[i][j] = AsciiLayoutSpec::CellType::ReservedForMagicState;
@@ -108,7 +109,7 @@ std::unique_ptr<Layout> make_edpc_layout(size_t num_core_qubits, const Distillat
     a_count = 0;
     j = grid[0].size() - t_distillation_region_cols - 1;
     for (size_t i = t_distillation_region_rows; i<grid.size()-t_distillation_region_rows; i++) {
-        if (grid[i][j] == 'A') {
+        if (grid[i][j] == 'Y') {
             a_count++;
             if (a_count%2 == 0) {
                 grid[i][j] = AsciiLayoutSpec::CellType::ReservedForMagicState;
