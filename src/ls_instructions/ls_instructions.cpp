@@ -22,9 +22,12 @@ tsl::ordered_set<PatchId> LSInstruction::get_operating_patches() const
             ret.insert(op.target);
         },
         // TRL 03/16/23: Implementing BellPairInit as a new LLI
+        // TRL 04/13/23: Adding the placenexto patches since routing will depend on boundaries being in correct locations 
         [&](const BellPairInit& op) {
             ret.insert(op.side1);
             ret.insert(op.side2);
+            ret.insert(op.loc1.target);
+            ret.insert(op.loc2.target);
         },
         [&](const MagicStateRequest& op){
             ret.insert(op.target);
