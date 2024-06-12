@@ -872,9 +872,10 @@ void run_through_dense_slices_dag(
 
 void run_through_dense_slices_wave(
         LSInstructionStream&& instruction_stream,
+        PipelineMode pipeline_mode,
         bool local_instructions,
         const Layout& layout,
-        Router& router,
+        std::unique_ptr<Router> router,
         std::optional<std::chrono::seconds> timeout,
         DenseSliceVisitor slice_visitor,
         LSInstructionVisitor instruction_visitor,
@@ -882,7 +883,7 @@ void run_through_dense_slices_wave(
         DensePatchComputationResult& res)
 {
     DenseSlice slice{layout, instruction_stream.core_qubits()};
-    WaveScheduler scheduler(std::move(instruction_stream), local_instructions, layout);
+    WaveScheduler scheduler(std::move(instruction_stream), local_instructions, layout, std::move(router), pipeline_mode);
     
     while (!scheduler.done())
     {
@@ -901,7 +902,7 @@ DensePatchComputationResult run_through_dense_slices(
         PipelineMode pipeline_mode,
         bool local_instructions,
         const Layout& layout,
-        Router& router,
+        std::unique_ptr<Router> router,
         std::optional<std::chrono::seconds> timeout,
         DenseSliceVisitor slice_visitor,
         LSInstructionVisitor instruction_visitor,
@@ -938,7 +939,7 @@ DensePatchComputationResult run_through_dense_slices(
                 std::move(instruction_stream),
                 local_instructions,
                 layout,
-                router,
+                *router,
                 timeout,
                 slice_visitor,
                 instruction_visitor,
@@ -953,7 +954,7 @@ DensePatchComputationResult run_through_dense_slices(
                 instruction_stream.core_qubits(),
                 local_instructions,
                 layout,
-                router,
+                *router,
                 timeout,
                 slice_visitor,
                 instruction_visitor,
@@ -962,11 +963,13 @@ DensePatchComputationResult run_through_dense_slices(
         }
         
         case PipelineMode::Wave:
+        case PipelineMode::EDPC:
             return run_through_dense_slices_wave(
                 std::move(instruction_stream),
+                pipeline_mode,
                 local_instructions,
                 layout,
-                router,
+                std::move(router),
                 timeout,
                 slice_visitor,
                 instruction_visitor,

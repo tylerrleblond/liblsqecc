@@ -8,11 +8,15 @@
 namespace lsqecc {
 
 
-WaveScheduler::WaveScheduler(LSInstructionStream&& stream, bool local_instructions, const Layout& layout):
+WaveScheduler::WaveScheduler(LSInstructionStream&& stream, bool local_instructions, const Layout& layout, std::unique_ptr<Router> router, PipelineMode pipeline_mode):
 	local_instructions_(local_instructions),
 	layout_(layout)
 {
-	router_.set_graph_search_provider(GraphSearchProvider::AStar);
+	router_ = std::move(router);
+	if (pipeline_mode == PipelineMode::EDPC)
+	{
+		router_->set_EDPC();
+	}	
 	
 	std::unordered_map<PatchId, InstructionID> patch_id_to_last_instruction;
 	
@@ -76,7 +80,7 @@ size_t WaveScheduler::schedule_instructions(const std::vector<InstructionID>& in
 		assert(dependency_counts_[instruction_id] == 0);
 		
 		auto& instruction = records_[instruction_id].instruction;
-		auto application_result = try_apply_instruction_direct_followup(slice, instruction, local_instructions_, layout_, router_);
+		auto application_result = try_apply_instruction_direct_followup(slice, instruction, local_instructions_, layout_, *router_);
 		
 		if (!application_result.maybe_error)
 		{   
@@ -200,7 +204,7 @@ bool WaveScheduler::try_schedule_immediately(InstructionID instruction_id, Dense
 	if (!is_immediate(instruction))
 		return false;
 	
-	auto application_result = try_apply_instruction_direct_followup(slice, instruction, local_instructions_, layout_, router_);
+	auto application_result = try_apply_instruction_direct_followup(slice, instruction, local_instructions_, layout_, *router_);
 	
 	if (application_result.maybe_error)
 		return false;

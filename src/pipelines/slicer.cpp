@@ -121,7 +121,7 @@ namespace lsqecc
                 .required(false);
         parser.add_argument()
                 .names({"-P", "--pipeline"})
-                .description("pipeline mode: stream (default), dag")
+                .description("pipeline mode: stream (default), dag, wave, EDPC")
                 .required(false);
         parser.add_argument()
                 .names({"-g", "--graph-search"})
@@ -258,6 +258,8 @@ namespace lsqecc
                 pipeline_mode = PipelineMode::Dag;
             else if (mode_arg=="wave")
                 pipeline_mode = PipelineMode::Wave;
+            else if (mode_arg=="edpc")
+                pipeline_mode = PipelineMode::EDPC;
             else
             {
                 err_stream << "Unknown pipeline mode " << mode_arg << std::endl;
@@ -510,7 +512,7 @@ namespace lsqecc
                     pipeline_mode,
                     compile_mode == CompilationMode::Local,
                     *layout,
-                    *router,
+                    std::move(router),
                     timeout,
                     slice_visitor,
                     instruction_visitor,
