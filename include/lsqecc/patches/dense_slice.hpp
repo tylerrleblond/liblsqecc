@@ -25,6 +25,8 @@ struct DenseSlice : public Slice
     DistillationTimeMap time_to_next_magic_state_by_distillation_region;
     std::reference_wrapper<const Layout> layout;
     std::vector<RoutingRegion> routes_to_EDPC_compile;
+    std::set<Cell> crossing_vertices;
+
 
     explicit DenseSlice(const Layout& layout);
     DenseSlice(const Layout& layout, const tsl::ordered_set<PatchId>& core_qubit_ids);
