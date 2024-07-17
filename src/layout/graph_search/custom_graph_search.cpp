@@ -31,6 +31,7 @@ double euclidean_distance(Cell a, Cell b)
     return std::sqrt(std::pow(a.row - b.row, 2) + std::pow(a.col - b.col, 2));
 }
 
+// Given two vertices, the comparator either compares (a) the distances stored in the predecessor map or (b) those distances plus the euclidean distance from the target cell
 template <class SliceSearcher, Heuristic heuristic>
 struct Comparator
 {
@@ -109,7 +110,33 @@ public:
 
     bool have_directed_edge(const Cell& a, const Cell& b) const
     {
+
+        // If both cells are free, then they have an edge (I guess it is assumed that this function is called only on neighbors!)
         if(slice_.is_cell_free(a) && slice_.is_cell_free(b)) return true;
+
+        // If they are source and/or target, then the appropriate boundaries need to be matched
+        if(a == cell_from_vertex(source_vertex_) && b == cell_from_vertex(target_vertex_))
+            return slice_.have_boundary_of_type_with(source_cell_, b, source_op_)
+                    && slice_.have_boundary_of_type_with(target_cell_, a, target_op_);
+
+
+        if(a == cell_from_vertex(source_vertex_) && slice_.is_cell_free(b))
+            return slice_.have_boundary_of_type_with(source_cell_, b, source_op_);
+
+        if(slice_.is_cell_free(a) && b == cell_from_vertex(target_vertex_))
+            return slice_.have_boundary_of_type_with(target_cell_, a, target_op_);
+
+        return false;
+    };
+
+    bool have_directed_edge_EDPC(const Cell& a, const Cell& b) const
+    {
+
+        // In EDPC we mark boundaries as reserved if previous routes have touched them, but do not assign activity to patches/cells until later.
+        // Thus, here we still require cells to be free, but also require the boundary between them to have not yet been reserved.
+        if ((slice_.is_cell_free_or_EDPC(a) && slice_.is_cell_free_or_EDPC(b))
+            && (!slice_.is_boundary_reserved(a, b)))
+         return true;
 
         if(a == cell_from_vertex(source_vertex_) && b == cell_from_vertex(target_vertex_))
             return slice_.have_boundary_of_type_with(source_cell_, b, source_op_)
@@ -181,23 +208,30 @@ std::optional<RoutingRegion> do_graph_search_route_ancilla(
 )
 {
 
+    // Get cells corresponding with source and target of route
     const Cell source_cell = slice.get_cell_by_id(source).value();
     const Cell target_cell = slice.get_cell_by_id(target).value();
 
+    // Instantiate SliceSearchAdaptor 
     const SliceSearchAdaptor<want_cycle> slice_searcher(slice, source_cell, target_cell, source_op, target_op);
 
-
+    // Get the number of vertices on lattice to instantiate a vector of PredecessorData, which associate vertices with costs and predecessors
     size_t num_vertices_on_lattice = slice_searcher.num_vertices_on_lattice();
     std::vector<PredecessorData> predecessor_map(num_vertices_on_lattice);
     for (size_t i = 0; i<predecessor_map.size(); ++i)
         predecessor_map[i] = PredecessorData{std::nullopt, i};
 
+    // We construct a ``comparator'' that uses a given heuristic to evaluate distances from target cell
+    // Because the comparator is like '>' rather than like '<', the MINIMUM is stored at the top of the priority queue!
     Comparator<decltype(slice_searcher), heuristic> cmp{target_cell, predecessor_map, slice_searcher};
     std::priority_queue<Vertex, std::vector<Vertex>, decltype(cmp)> frontier(cmp);
 
     if constexpr (!want_cycle)
     {
+        // Start with the source vertex. Give it a distance of zero and make it its own predecessor.
         predecessor_map[slice_searcher.source_vertex()] = {0, slice_searcher.source_vertex()};
+
+        // Push this vertex onto the priority queue.
         frontier.push(slice_searcher.source_vertex());
     }
     else // Simulated double source to force a cycle case
@@ -208,7 +242,8 @@ std::optional<RoutingRegion> do_graph_search_route_ancilla(
         auto neighbours = slice_searcher.get_neighbours(source_cell);
         for(const Cell& neighbour_cell : neighbours)
         {
-            if(slice_searcher.have_directed_edge(source_cell, neighbour_cell))
+            if((!EDPC && slice_searcher.have_directed_edge(source_cell, neighbour_cell)) ||
+                (EDPC && slice_searcher.have_directed_edge_EDPC(source_cell, neighbour_cell)))
             {
                 Vertex neighbour = slice_searcher.make_vertex(neighbour_cell);
                 predecessor_map[neighbour] = {1, simulated_source};
@@ -218,20 +253,35 @@ std::optional<RoutingRegion> do_graph_search_route_ancilla(
 
     }
 
+    // This loop terminates when there is nothing left in the priority queue, i.e. everything has been popped off
     while(frontier.size()>0)
     {
+        // Pop the top of the priority queue (i.e. the vertex with the smallest distance, or cost)
         Vertex curr = frontier.top(); frontier.pop();
+
+        // Obtain the distance for this vertex
         size_t distance_to_curr = *predecessor_map[curr].distance;
 
+        // If we are using a heuristic, we assume that if we have hit the target vertex then we have found the best path; otherwise, we search the whole graph 
         if constexpr (heuristic != Heuristic::None)
             if(curr == slice_searcher.target_vertex()) break;
 
+        // Loop over the neighbors of this vertex
         auto neighbours = slice_searcher.get_neighbours(curr);
         for(const Cell& neighbour_cell : neighbours)
         {
-            if(!slice_searcher.have_directed_edge(slice_searcher.cell_from_vertex(curr), neighbour_cell))
-                continue;
+            // Check if there is any directed edge between this neighbor and the current vertex
+            if((!EDPC && !slice_searcher.have_directed_edge(slice_searcher.cell_from_vertex(curr), neighbour_cell)) ||
+                (EDPC && !slice_searcher.have_directed_edge_EDPC(slice_searcher.cell_from_vertex(curr), neighbour_cell)))
+                    continue;
 
+            // If there IS a directed edge, and this vertex has not been encountered increment the distance for the neighbor and add curr as predecessor
+            // If it HAS been encountered, we only update distance if it is lower than the one already there
+
+            /* We are moving from the source vertex toward all its neighbors and if routing to them is possible they are added to the queue. 
+                The distance, or cost, tracks the minimum number of cells that need to be moved through 
+               The priority queue adds a heuristic distance to the cost so that vertices with lower L2 distance from target are prioritized
+            */
             Vertex neighbour = slice_searcher.make_vertex(neighbour_cell);
             if(!predecessor_map[neighbour].distance)
             {
@@ -257,8 +307,11 @@ std::optional<RoutingRegion> do_graph_search_route_ancilla(
 
 
     // TODO refactor this to be shared with the boost implementation
+
+    // This section of code constructs the routing region
     RoutingRegion ret;
 
+    // We start with the target vertex and its predecessor and iterate the predecessor, adding cells and boundaries until we reach the source
     Vertex prec = slice_searcher.target_vertex();
     Vertex curr = predecessor_map[slice_searcher.target_vertex()].predecessor;
     Vertex next = predecessor_map[curr].predecessor;
@@ -282,7 +335,9 @@ std::optional<RoutingRegion> do_graph_search_route_ancilla(
             if (prec_cell==neighbour || next_cell==neighbour)
             {
                 auto boundary = ret.cells.back().get_mut_boundary_with(neighbour);
-                if (boundary) boundary->get() = {.boundary_type=BoundaryType::Connected, .is_active=true};
+                if (boundary) {
+                    EDPC ? boundary->get() = {.boundary_type=BoundaryType::Reserved, .is_active=true} : boundary->get() = {.boundary_type=BoundaryType::Connected, .is_active=true};
+                }
             }
         }
 
