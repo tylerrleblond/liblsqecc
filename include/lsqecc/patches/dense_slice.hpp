@@ -25,6 +25,8 @@ struct DenseSlice : public Slice
     DistillationTimeMap time_to_next_magic_state_by_distillation_region;
     std::reference_wrapper<const Layout> layout;
     std::set<Cell> EDPC_crossing_vertices;
+    std::vector<std::reference_wrapper<Boundary>> marked_rough_boundaries_EDPC;
+    std::vector<std::reference_wrapper<Boundary>> marked_smooth_boundaries_EDPC;
 
 
     explicit DenseSlice(const Layout& layout);

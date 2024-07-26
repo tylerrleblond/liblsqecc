@@ -132,8 +132,8 @@ public:
     bool have_directed_edge_EDPC(const Cell& a, const Cell& b) const
     {
 
-        // In EDPC we mark boundaries as reserved if previous routes have touched them, but do not assign activity to patches/cells until later.
-        // Thus, here we still require cells to be free, but also require the boundary between them to have not yet been reserved.
+        // In EDPC we assign dummy patches to cells that have been touched and mark them with PatchActivity::EDPC, and also reserve boundaries
+        // Thus here we allow to route through EDPC cells but make sure that boundaries have not yet been reserved
         if ((slice_.is_cell_free_or_EDPC(a) && slice_.is_cell_free_or_EDPC(b))
             && (!slice_.is_boundary_reserved(a, b)))
          return true;
