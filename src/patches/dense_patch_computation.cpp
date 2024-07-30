@@ -95,13 +95,13 @@ void advance_slice(DenseSlice& slice, const Layout& layout)
         if (p->activity == PatchActivity::EDPC)
         {
             p->activity = PatchActivity::Reserved;
-            p->boundaries.top.boundary_type = BoundaryType::Rough;
-            p->boundaries.right.boundary_type = BoundaryType::Smooth;
-            p->boundaries.bottom.boundary_type = BoundaryType::Rough;
-            p->boundaries.left.boundary_type = BoundaryType::Smooth;
+            // p->boundaries.top.boundary_type = BoundaryType::Rough;
+            // p->boundaries.right.boundary_type = BoundaryType::Smooth;
+            // p->boundaries.bottom.boundary_type = BoundaryType::Rough;
+            // p->boundaries.left.boundary_type = BoundaryType::Smooth;
         }
 
-        if (p->activity != PatchActivity::Rotation)
+        if ((p->activity != PatchActivity::Rotation) && (p->activity != PatchActivity::Reserved))
         {
             p->boundaries.top.is_active = false;
             p->boundaries.bottom.is_active = false;
@@ -180,6 +180,7 @@ void mark_routing_region(DenseSlice& slice, RoutingRegion& routing_region, Patch
 
     // Loop over cells in routing region
     size_t counter = 0;
+    Cell* prev_cell = nullptr;
     for (auto& occupied_cell : routing_region.cells)
     {
         
@@ -196,6 +197,7 @@ void mark_routing_region(DenseSlice& slice, RoutingRegion& routing_region, Patch
 
                 // If this crossing vertex has not been yet seen, add it to the set (and mark it with a measurement for visualization purposes)
                 auto result = slice.EDPC_crossing_vertices.insert(occupied_cell.cell);
+                // std::cerr<< occupied_cell.cell << std::endl;
                 if (!result.second) 
                 {
                     throw std::runtime_error("Vertices cannot be crossed by more than two paths in EDPC.");
@@ -203,7 +205,7 @@ void mark_routing_region(DenseSlice& slice, RoutingRegion& routing_region, Patch
                 // patch->activity = PatchActivity::Measurement;
 
                 // Update boundaries of patch at crossing vertex, making sure that the new edges have the opposite label as the old edges
-                current_label = slice.mark_boundaries_for_crossing_cell(patch.value(), occupied_cell);
+                current_label = slice.mark_boundaries_for_crossing_cell(patch.value(), occupied_cell, *prev_cell);
             }
 
             // Otherwise, we check whether this is the control or target qubit and add appropriate boundaries if so
@@ -264,6 +266,7 @@ void mark_routing_region(DenseSlice& slice, RoutingRegion& routing_region, Patch
         }
 
         counter++;
+        prev_cell = &occupied_cell.cell;
     }
 }
 
@@ -917,6 +920,13 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
                                         slice.get_cell_by_id(bell_cnot->target).value()});
 
                     // We mark the routing region using patches with (Reserved_Label1 or Reserved_Label2) boundary labels to the DenseSlice and the dummy PatchActivity::EDPC
+                    // for (size_t i=0; i<routing_region->cells.size() - 1; i++)
+                    // {
+                        // auto bd_type = slice.get_boundary_between(bell_cnot->route->cells[i].cell, bell_cnot->route->cells[i+1].cell).value().get().boundary_type;
+                        // auto conj_bd_type = slice.get_boundary_between(bell_cnot->route->cells[i+1].cell, bell_cnot->route->cells[i].cell).value().get().boundary_type;
+                        // std::cerr << bell_cnot->route->cells[i].cell << " " << bell_cnot->route->cells[i+1].cell << " " << bd_type << " " << conj_bd_type << std::endl;
+                        // std::cerr << routing_region->cells[i].cell << " " << routing_region->cells[i+1].cell << std::endl;
+                    // } 
                     mark_routing_region(slice, *routing_region, PatchActivity::EDPC);      
 
                     // Store routing region within the instruction (importantly, boundaries of cells in this routing region object have not been re-labeled!)
@@ -925,7 +935,8 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
                     // for (size_t i=0; i<bell_cnot->route->cells.size() - 1; i++)
                     // {
                     //     auto bd_type = slice.get_boundary_between(bell_cnot->route->cells[i].cell, bell_cnot->route->cells[i+1].cell).value().get().boundary_type;
-                    //     std::cerr << bell_cnot->route->cells[i].cell << " " << bell_cnot->route->cells[i+1].cell << " " << bd_type << std::endl;
+                    //     auto conj_bd_type = slice.get_boundary_between(bell_cnot->route->cells[i+1].cell, bell_cnot->route->cells[i].cell).value().get().boundary_type;
+                    //     std::cerr << bell_cnot->route->cells[i].cell << " " << bell_cnot->route->cells[i+1].cell << " " << bd_type << " " << conj_bd_type << std::endl;
                     // } 
 
                     // std::cerr << "Rough boundaries" << std::endl;
@@ -1062,13 +1073,14 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
                         bell_cnot->local_instruction_sets = {std::move(local_instructions_phase1), std::move(local_instructions_phase2)};
                         bell_cnot->counter_pairs = {std::pair<unsigned int, unsigned int>(0, 0), std::pair<unsigned int, unsigned int>(0, 0)};
 
-                        // for (size_t phase : {0, 1})
-                        // {
-                        //     for (const auto& instr : bell_cnot->local_instruction_sets.value()[phase])
-                        //     {
-                        //         std::cerr << instr << std::endl;
-                        //     }
-                        // }
+                        for (size_t phase : {0, 1})
+                        {
+                            for (const auto& instr : bell_cnot->local_instruction_sets.value()[phase])
+                            {
+                                std::cerr << instr;
+                            }
+                            std::cerr << std::endl;
+                        }
 
                         // We (once again) return the instruction back to the scheduler and apply local instructions later (once the decomposition and scheduling has occurred for all EDP)
                         return {std::make_unique<std::runtime_error>(lstk::cat(instruction,"; EDPC requires all CNOTs to be decomposed into local instructions before slicing can occur.")), {}};
@@ -1076,7 +1088,7 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
 
                     // Loop over phases to apply local instructions 
                     for (size_t phase : {0, 1})
-                    {
+                    {  
                         bell_cnot->counter_pairs.value()[phase].first = bell_cnot->counter_pairs.value()[phase].second;
                         
                         for (unsigned int i = bell_cnot->counter_pairs.value()[phase].first; i < bell_cnot->local_instruction_sets.value()[phase].size(); i++)
@@ -1084,11 +1096,18 @@ InstructionApplicationResult try_apply_instruction_direct_followup(
                             InstructionApplicationResult r = try_apply_local_instruction(slice, bell_cnot->local_instruction_sets.value()[phase][i], layout, router);
                             if (r.maybe_error && r.followup_instructions.empty())
                             {
-                                return InstructionApplicationResult{nullptr, {instruction}};
+                                return {nullptr, {instruction}};
                             }
                             if (!r.followup_instructions.empty())
                                 throw std::runtime_error(lstk::cat(instruction,"; Followup local instructions not implemented"));
+                            
                             bell_cnot->counter_pairs.value()[phase].second++;
+
+                            // Make sure we don't start applying phase 2 instructions pre-maturely
+                            if ((phase == 0) && 
+                                (bell_cnot->counter_pairs.value()[phase].second == bell_cnot->local_instruction_sets.value()[phase].size()) &&
+                                (bell_cnot->local_instruction_sets.value()[1].size() != 0))
+                                return {nullptr, {instruction}};
                         }
                     }
                     
