@@ -1728,7 +1728,7 @@
             "Top": "Dashed"
          },
          "patch_type": "Qubit",
-         "text": "Id: 25"
+         "text": "Not bound"
       },
       {
          "activity": {
@@ -1754,7 +1754,7 @@
             "Top": "Dashed"
          },
          "patch_type": "Qubit",
-         "text": "Id: 31"
+         "text": "Not bound"
       },
       {
          "activity": {
@@ -1780,7 +1780,7 @@
             "Top": "Dashed"
          },
          "patch_type": "Qubit",
-         "text": "Id: 27"
+         "text": "Not bound"
       },
       {
          "activity": {
@@ -6305,7 +6305,7 @@
             "Top": "DashedStiched"
          },
          "patch_type": "Qubit",
-         "text": "Id: 25"
+         "text": "Not bound"
       },
       {
          "activity": {
@@ -6331,7 +6331,7 @@
             "Top": "Dashed"
          },
          "patch_type": "Qubit",
-         "text": "Id: 31"
+         "text": "Not bound"
       },
       {
          "activity": {
@@ -6357,7 +6357,7 @@
             "Top": "DashedStiched"
          },
          "patch_type": "Qubit",
-         "text": "Id: 27"
+         "text": "Not bound"
       },
       {
          "activity": {
